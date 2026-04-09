@@ -1,39 +1,64 @@
-import { useState } from 'react';
-import { Alert, Button, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
-import * as ImagePicker from 'expo-image-picker';
+import { useIsFocused } from "@react-navigation/native";
+import { CameraType, CameraView, useCameraPermissions } from "expo-camera";
+import * as ImagePicker from "expo-image-picker";
+import { useRef, useState } from "react";
+import {
+  Alert,
+  Button,
+  Image,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 export default function CameraAndPicker() {
-  const [facing, setFacing] = useState<CameraType>('back');
+  const [facing, setFacing] = useState<CameraType>("back");
   const [permission, requestPermission] = useCameraPermissions();
   const [pickedImage, setPickedImage] = useState<string | null>(null);
 
-  // --- Permissions ---
+  // 1. Create a ref for the CameraView
+  const cameraRef = useRef<CameraView>(null);
+
+  const isFocused = useIsFocused();
+
   if (!permission) return <View />;
   if (!permission.granted) {
     return (
       <View style={styles.container}>
-        <Text style={styles.message}>We need your permission to show the camera</Text>
+        <Text style={styles.message}>
+          We need your permission to show the camera
+        </Text>
         <Button onPress={requestPermission} title="Grant Permission" />
       </View>
     );
   }
 
-  // --- Toggle camera ---
   function toggleCameraFacing() {
-    setFacing(current => (current === 'back' ? 'front' : 'back'));
+    setFacing((current) => (current === "back" ? "front" : "back"));
   }
 
-  // --- Image Picker ---
+  // 2. Function to take the photo
+  const takePicture = async () => {
+    if (cameraRef.current) {
+      const photo = await cameraRef.current.takePictureAsync();
+      setPickedImage(photo?.uri || null);
+    }
+  };
+
   const pickImage = async () => {
-    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    const permissionResult =
+      await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permissionResult.granted) {
-      Alert.alert('Permission required', 'Permission to access media library is required.');
+      Alert.alert(
+        "Permission required",
+        "Permission to access media library is required.",
+      );
       return;
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.All, // images & videos
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [4, 3],
       quality: 1,
@@ -46,20 +71,34 @@ export default function CameraAndPicker() {
 
   return (
     <View style={styles.container}>
-      {/* Camera */}
-      <CameraView style={styles.camera} facing={facing} />
+      {isFocused && (
+        <CameraView
+          ref={cameraRef} // 3. Attach the ref
+          style={styles.camera}
+          facing={facing}
+        />
+      )}
 
-      {/* Camera Buttons */}
-      <View style={styles.buttonContainer}>
-        <TouchableOpacity style={styles.button} onPress={toggleCameraFacing}>
-          <Text style={styles.text}>Flip Camera</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.button} onPress={pickImage}>
-          <Text style={styles.text}>Pick from Gallery</Text>
+      {/* --- UI Overlays --- */}
+
+      {/* Flip Camera: Upper Left */}
+      <TouchableOpacity style={styles.flipButton} onPress={toggleCameraFacing}>
+        <Text style={styles.text}>Flip</Text>
+      </TouchableOpacity>
+
+      {/* Snap Photo: Center Bottom */}
+      <View style={styles.snapButtonContainer}>
+        <TouchableOpacity style={styles.snapButton} onPress={takePicture}>
+          <View style={styles.snapButtonInner} />
         </TouchableOpacity>
       </View>
 
-      {/* Preview picked image */}
+      {/* Choose Photos: Lower Left */}
+      <TouchableOpacity style={styles.galleryButton} onPress={pickImage}>
+        <Text style={styles.text}>Choose Photo</Text>
+      </TouchableOpacity>
+
+      {/* Preview */}
       {pickedImage && (
         <Image source={{ uri: pickedImage }} style={styles.previewImage} />
       )}
@@ -68,27 +107,66 @@ export default function CameraAndPicker() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center' },
-  message: { textAlign: 'center', paddingBottom: 10 },
+  container: { flex: 1, backgroundColor: "black" },
+  message: { textAlign: "center", paddingBottom: 10 },
   camera: { flex: 1 },
-  buttonContainer: {
-    position: 'absolute',
-    bottom: 64,
-    flexDirection: 'row',
-    backgroundColor: 'transparent',
-    width: '100%',
-    justifyContent: 'space-around',
-    paddingHorizontal: 16,
-  },
-  button: { alignItems: 'center', padding: 10, backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 8 },
-  text: { fontSize: 18, fontWeight: 'bold', color: 'white' },
-  previewImage: {
-    position: 'absolute',
+
+  // Positioned Upper Left
+  flipButton: {
+    position: "absolute",
     top: 50,
-    right: 16,
-    width: 100,
-    height: 100,
+    left: 20,
+    padding: 10,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    borderRadius: 8,
+  },
+
+  // Positioned Lower Left
+  galleryButton: {
+    position: "absolute",
+    bottom: 50,
+    left: 20,
+    padding: 15,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    borderRadius: 8,
+  },
+
+  // Container to help center the snap button
+  snapButtonContainer: {
+    position: "absolute",
+    bottom: 40,
+    alignSelf: "center",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  // Circle Snap Button
+  snapButton: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 4,
+    borderColor: "white",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  snapButtonInner: {
+    width: 65,
+    height: 65,
+    borderRadius: 32.5,
+    backgroundColor: "white",
+  },
+
+  text: { fontSize: 16, fontWeight: "bold", color: "white" },
+
+  previewImage: {
+    position: "absolute",
+    top: 50,
+    right: 20,
+    width: 80,
+    height: 120,
     borderWidth: 2,
-    borderColor: 'white',
+    borderColor: "white",
+    borderRadius: 4,
   },
 });
